@@ -1,9 +1,8 @@
 import json
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap
+from PySide6.QtGui import QAction, QActionGroup, QColor, QMouseEvent, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
@@ -19,8 +18,17 @@ from balance_api import BalanceResult
 
 HEADER_HEIGHT = 26
 MIN_W = 260
-MIN_H = 150
+MIN_H = 100
 STATE_FILE = Path(__file__).parent / "state.json"
+INTERVAL_OPTIONS = [30, 60, 300, 600, 1800]
+MENU_STYLE = (
+    "QMenu { background: rgba(255, 255, 255, 0.96); border: 1px solid rgba(15, 23, 42, 0.12);"
+    " border-radius: 8px; padding: 6px; }"
+    "QMenu::item { color: #0f172a; font-size: 13px; padding: 6px 18px; border-radius: 5px; }"
+    "QMenu::item:selected { background: rgba(16, 185, 129, 0.12); color: #047857; }"
+    "QMenu::item:disabled { color: #94a3b8; }"
+    "QMenu::separator { height: 1px; background: rgba(15, 23, 42, 0.08); margin: 5px 8px; }"
+)
 
 
 def currency_symbol(currency: str) -> str:
@@ -43,13 +51,15 @@ def draw_dot(color: QColor, size: int = 10) -> QLabel:
 
 
 class BalanceWindow(QWidget):
-    def __init__(self, on_refresh, on_quit, refresh_seconds: int, parent=None):
+    def __init__(self, on_refresh, on_quit, on_open_config, on_reload_config, on_set_interval, refresh_seconds: int, parent=None):
         super().__init__(parent)
         self.on_refresh = on_refresh
         self.on_quit = on_quit
+        self.on_open_config = on_open_config
+        self.on_reload_config = on_reload_config
+        self.on_set_interval = on_set_interval
         self.refresh_seconds = refresh_seconds
         self._drag_offset: QPoint | None = None
-        self._last_update = None
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
@@ -110,27 +120,7 @@ class BalanceWindow(QWidget):
             "color: #0f172a; font-size: 30px; font-weight: bold; background: transparent;"
         )
         layout.addWidget(self.total_label)
-
-        detail_box = QFrame()
-        detail_box.setStyleSheet(
-            "QFrame { background: rgba(255, 255, 255, 0.55); border-radius: 8px; }"
-        )
-        detail_layout = QVBoxLayout(detail_box)
-        detail_layout.setContentsMargins(10, 6, 10, 6)
-        detail_layout.setSpacing(2)
-
-        self.detail_label = QLabel("")
-        self.detail_label.setStyleSheet(
-            "color: #475569; font-size: 12px; background: transparent;"
-        )
-        detail_layout.addWidget(self.detail_label)
-
-        self.state_label = QLabel("")
-        self.state_label.setStyleSheet(
-            "color: #94a3b8; font-size: 11px; background: transparent;"
-        )
-        detail_layout.addWidget(self.state_label)
-        layout.addWidget(detail_box)
+        layout.addStretch(1)
 
         self.setFixedWidth(MIN_W)
         self.setMinimumHeight(MIN_H)
@@ -143,12 +133,9 @@ class BalanceWindow(QWidget):
         self.total_label.setStyleSheet(
             "color: #64748b; font-size: 20px; font-weight: bold; background: transparent;"
         )
-        self.detail_label.setText("")
-        self.state_label.setText("")
         self._set_dot(QColor(160, 160, 160))
 
     def show_result(self, result: BalanceResult):
-        self._last_update = datetime.now()
         if not result.ok:
             self._show_error(result.error)
             return
@@ -158,30 +145,16 @@ class BalanceWindow(QWidget):
         self.total_label.setStyleSheet(
             "color: #0f172a; font-size: 30px; font-weight: bold; background: transparent;"
         )
-        detail_lines = []
-        if info:
-            detail_lines.append(
-                f"赠送 {symbol}{info['granted']}　·　充值 {symbol}{info['topped_up']}"
-            )
         if result.is_available:
             self._set_dot(QColor(34, 197, 94))
         else:
             self._set_dot(QColor(239, 68, 68))
-        detail_lines.append(
-            "可用" if result.is_available else "不可用（余额不足）"
-        )
-        self.detail_label.setText("　　".join(detail_lines[:1]))
-        self.state_label.setText(
-            f"上次刷新 {self._last_update.strftime('%H:%M:%S')}"
-        )
 
     def _show_error(self, error: str):
         self.total_label.setText("⚠")
         self.total_label.setStyleSheet(
             "color: #dc2626; font-size: 30px; font-weight: bold; background: transparent;"
         )
-        self.detail_label.setText(error)
-        self.state_label.setText(f"上次刷新 {self._last_update.strftime('%H:%M:%S') if self._last_update else '—'}")
         self._set_dot(QColor(239, 68, 68))
 
     def _set_dot(self, color: QColor):
@@ -231,9 +204,46 @@ class BalanceWindow(QWidget):
     # ---- menu ----
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        menu.addAction("⟳ 立即刷新", self.on_refresh)
+        menu.setStyleSheet(MENU_STYLE)
+
+        refresh = QAction("⟳ 立即刷新", menu)
+        refresh.triggered.connect(self.on_refresh)
+        menu.addAction(refresh)
+
+        open_cfg = QAction("⚙ 打开配置文件", menu)
+        open_cfg.triggered.connect(self.on_open_config)
+        menu.addAction(open_cfg)
+
+        reload_cfg = QAction("↻ 刷新配置文件", menu)
+        reload_cfg.triggered.connect(self.on_reload_config)
+        menu.addAction(reload_cfg)
+
         menu.addSeparator()
-        menu.addAction(f"自动刷新间隔 {self.refresh_seconds}s", lambda: None).setEnabled(False)
+
+        interval_menu = QMenu("自动刷新间隔", menu)
+        interval_menu.setStyleSheet(MENU_STYLE)
+        group = QActionGroup(interval_menu)
+        for seconds in INTERVAL_OPTIONS:
+            action = QAction(f"{seconds}s", interval_menu)
+            action.setCheckable(True)
+            action.setChecked(seconds == self.refresh_seconds)
+            action.triggered.connect(
+                lambda checked=False, s=seconds: self._choose_interval(s)
+            )
+            group.addAction(action)
+            interval_menu.addAction(action)
+        menu.addMenu(interval_menu)
+
         menu.addSeparator()
-        menu.addAction("退出", self.on_quit)
+
+        quit_action = QAction("退出", menu)
+        quit_action.triggered.connect(self.on_quit)
+        menu.addAction(quit_action)
+
         menu.exec(event.globalPos())
+
+    def _choose_interval(self, seconds: int):
+        if seconds == self.refresh_seconds:
+            return
+        self.refresh_seconds = seconds
+        self.on_set_interval(seconds)

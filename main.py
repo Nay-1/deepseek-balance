@@ -2,14 +2,15 @@ import json
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit
 
 from balance_api import BalanceApi
 from balance_window import BalanceWindow
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
-REFRESH_SECONDS = 300
+DEFAULT_REFRESH_SECONDS = 300
 
 
 def load_config() -> dict:
@@ -41,18 +42,24 @@ def prompt_api_key() -> str:
 class App:
     def __init__(self):
         self.config = load_config()
+        self.refresh_seconds = int(
+            self.config.get("refresh_seconds", DEFAULT_REFRESH_SECONDS)
+        )
         self.api = BalanceApi()
         self.api.finished.connect(self._on_result)
 
         self.window = BalanceWindow(
             on_refresh=self.refresh,
             on_quit=self.quit,
-            refresh_seconds=REFRESH_SECONDS,
+            on_open_config=self.open_config,
+            on_reload_config=self.reload_config,
+            on_set_interval=self.set_refresh_interval,
+            refresh_seconds=self.refresh_seconds,
         )
         self.window.show()
 
         self.timer = QTimer()
-        self.timer.setInterval(REFRESH_SECONDS * 1000)
+        self.timer.setInterval(self.refresh_seconds * 1000)
         self.timer.timeout.connect(self.refresh)
         self.timer.start()
 
@@ -80,6 +87,24 @@ class App:
 
     def _on_result(self, result):
         self.window.show_result(result)
+
+    def open_config(self):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_FILE)))
+
+    def reload_config(self):
+        self.config = load_config()
+        self.refresh_seconds = int(
+            self.config.get("refresh_seconds", self.refresh_seconds)
+        )
+        self.timer.setInterval(self.refresh_seconds * 1000)
+        self.refresh()
+
+    def set_refresh_interval(self, seconds: int):
+        self.refresh_seconds = seconds
+        self.config["refresh_seconds"] = seconds
+        save_config(self.config)
+        self.timer.setInterval(seconds * 1000)
+        self.refresh()
 
     def quit(self):
         self.window._save_state()
