@@ -3,14 +3,27 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog, QLineEdit
 
 from balance_api import BalanceApi
 from balance_window import BalanceWindow
 
-CONFIG_FILE = Path(__file__).parent / "config.json"
 DEFAULT_REFRESH_SECONDS = 300
+
+
+def app_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
+CONFIG_FILE = app_dir() / "config.json"
+
+
+def app_icon() -> QIcon:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    return QIcon(str(base / "assets" / "icon.png"))
 
 
 def load_config() -> dict:
@@ -127,6 +140,9 @@ class App:
 def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)
+    app.setApplicationName("deepseek-balance")
+    app.setDesktopFileName("deepseek-balance")
+    app.setWindowIcon(app_icon())
     App()
     sys.exit(app.exec())
 

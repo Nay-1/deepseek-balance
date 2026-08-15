@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt
@@ -16,10 +17,16 @@ from PySide6.QtWidgets import (
 
 from balance_api import BalanceResult
 
+def app_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent
+
+
 HEADER_HEIGHT = 26
 MIN_W = 260
 MIN_H = 100
-STATE_FILE = Path(__file__).parent / "state.json"
+STATE_FILE = app_dir() / "state.json"
 INTERVAL_OPTIONS = [30, 60, 300, 600, 1800]
 MENU_STYLE = (
     "QMenu { background: rgba(255, 255, 255, 0.96); border: 1px solid rgba(15, 23, 42, 0.12);"
