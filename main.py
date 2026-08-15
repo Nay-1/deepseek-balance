@@ -43,8 +43,6 @@ def load_keys(config: dict) -> dict:
     keys = config.get("api_keys")
     if isinstance(keys, dict) and keys:
         return dict(keys)
-    if config.get("api_key"):
-        return {"默认": config["api_key"]}
     return {}
 
 
@@ -81,7 +79,7 @@ class App:
     def _ask_key(self):
         key = prompt_api_key()
         if key:
-            self.config["api_key"] = key
+            self.config.setdefault("api_keys", {})["默认"] = key
             save_config(self.config)
             self.keys = load_keys(self.config)
             self.refresh()

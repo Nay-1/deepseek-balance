@@ -16,6 +16,7 @@ PySide6 桌面小组件，查询 DeepSeek API 余额（浮窗，仅 X11）。
 
 ## 注意
 
-- `config.json` 存明文 API Key、`state.json` 存窗口位置，两者均已 gitignore，改路径时勿解开
+- `config.json` 存明文 API Key（`api_keys` 映射：名称 → key，不再兼容旧 `api_key` 字段）、`state.json` 存窗口位置，两者均已 gitignore，改路径时勿解开
 - UI 文案为中文，新增文案沿用中文
 - 错误提示约定：401 → "API Key 无效"，402 → "余额不足"
+- 未经用户明确要求，不得 `git commit` / `git push`
