@@ -60,6 +60,8 @@ class BalanceWindow(QWidget):
         self.on_set_interval = on_set_interval
         self.refresh_seconds = refresh_seconds
         self._drag_offset: QPoint | None = None
+        self._results: dict = {}
+        self._current = ""
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
@@ -94,11 +96,11 @@ class BalanceWindow(QWidget):
         self.status_dot = draw_dot(QColor(160, 160, 160))
         header.addWidget(self.status_dot)
 
-        title = QLabel("DeepSeek 余额")
-        title.setStyleSheet(
+        self.title_label = QLabel("DeepSeek 余额")
+        self.title_label.setStyleSheet(
             "color: #0e7490; font-size: 14px; font-weight: bold; background: transparent;"
         )
-        header.addWidget(title)
+        header.addWidget(self.title_label)
         header.addStretch(1)
 
         self.refresh_btn = QPushButton("⟳")
@@ -134,6 +136,19 @@ class BalanceWindow(QWidget):
             "color: #64748b; font-size: 20px; font-weight: bold; background: transparent;"
         )
         self._set_dot(QColor(160, 160, 160))
+
+    def show_results(self, results: dict):
+        self._results = dict(results)
+        if self._current not in self._results:
+            self._current = next(iter(self._results))
+        self._show_current()
+
+    def _show_current(self):
+        if len(self._results) > 1:
+            self.title_label.setText(f"DeepSeek 余额 · {self._current}")
+        else:
+            self.title_label.setText("DeepSeek 余额")
+        self.show_result(self._results[self._current])
 
     def show_result(self, result: BalanceResult):
         if not result.ok:
@@ -234,6 +249,22 @@ class BalanceWindow(QWidget):
             interval_menu.addAction(action)
         menu.addMenu(interval_menu)
 
+        if len(self._results) > 1:
+            menu.addSeparator()
+            key_menu = QMenu("切换 Key", menu)
+            key_menu.setStyleSheet(MENU_STYLE)
+            key_group = QActionGroup(key_menu)
+            for name in self._results:
+                action = QAction(name, key_menu)
+                action.setCheckable(True)
+                action.setChecked(name == self._current)
+                action.triggered.connect(
+                    lambda checked=False, n=name: self._choose_key(n)
+                )
+                key_group.addAction(action)
+                key_menu.addAction(action)
+            menu.addMenu(key_menu)
+
         menu.addSeparator()
 
         quit_action = QAction("退出", menu)
@@ -247,3 +278,9 @@ class BalanceWindow(QWidget):
             return
         self.refresh_seconds = seconds
         self.on_set_interval(seconds)
+
+    def _choose_key(self, name: str):
+        if name == self._current:
+            return
+        self._current = name
+        self._show_current()

@@ -39,12 +39,22 @@ def prompt_api_key() -> str:
     return text.strip() if ok else ""
 
 
+def load_keys(config: dict) -> dict:
+    keys = config.get("api_keys")
+    if isinstance(keys, dict) and keys:
+        return dict(keys)
+    if config.get("api_key"):
+        return {"默认": config["api_key"]}
+    return {}
+
+
 class App:
     def __init__(self):
         self.config = load_config()
         self.refresh_seconds = int(
             self.config.get("refresh_seconds", DEFAULT_REFRESH_SECONDS)
         )
+        self.keys = load_keys(self.config)
         self.api = BalanceApi()
         self.api.finished.connect(self._on_result)
 
@@ -63,7 +73,7 @@ class App:
         self.timer.timeout.connect(self.refresh)
         self.timer.start()
 
-        if not self.config.get("api_key"):
+        if not self.keys:
             self._ask_key()
         else:
             self.refresh()
@@ -73,20 +83,24 @@ class App:
         if key:
             self.config["api_key"] = key
             save_config(self.config)
+            self.keys = load_keys(self.config)
             self.refresh()
         else:
             self.window._show_error("未配置 API Key（右键可重试）")
 
     def refresh(self):
-        key = self.config.get("api_key")
-        if not key:
+        if not self.keys:
             self._ask_key()
             return
         self.window.show_loading()
-        self.api.fetch(key)
+        self._results = {}
+        for name, key in self.keys.items():
+            self.api.fetch(key, name)
 
     def _on_result(self, result):
-        self.window.show_result(result)
+        self._results[result.name] = result
+        if len(self._results) == len(self.keys):
+            self.window.show_results(self._results)
 
     def open_config(self):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_FILE)))
@@ -97,6 +111,7 @@ class App:
             self.config.get("refresh_seconds", self.refresh_seconds)
         )
         self.timer.setInterval(self.refresh_seconds * 1000)
+        self.keys = load_keys(self.config)
         self.refresh()
 
     def set_refresh_interval(self, seconds: int):
